@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
 	"github.com/International-Combat-Archery-Alliance/articles-api/articles"
@@ -109,40 +108,37 @@ func (a *API) GetArticlesV1Admin(ctx context.Context, request GetArticlesV1Admin
 		limit = int32(*request.Params.Limit)
 	}
 
-	publishedResult, pubErr := a.db.GetArticles(ctx, limit, request.Params.Cursor, string(articles.StatusPublished))
-	draftResult, draftErr := a.db.GetArticles(ctx, limit, request.Params.Cursor, string(articles.StatusDraft))
+	result, err := a.db.GetArticles(ctx, limit, request.Params.Cursor, "")
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		logger.Error("Failed to get articles from DB", "error", err)
 
-	if pubErr != nil && draftErr != nil {
-		span.RecordError(pubErr)
-		span.SetStatus(codes.Error, pubErr.Error())
-		logger.Error("Failed to get all articles from DB", "error", pubErr)
+		var articleErr *articles.Error
+		if errors.As(err, &articleErr) {
+			switch articleErr.Reason {
+			case articles.REASON_INVALID_CURSOR:
+				return GetArticlesV1Admin400JSONResponse{
+					Code:    InvalidCursor,
+					Message: "Invalid cursor",
+				}, nil
+			}
+		}
 		return GetArticlesV1Admin500JSONResponse{
 			Code:    InternalError,
 			Message: "Failed to get articles",
 		}, nil
 	}
 
-	allArticles := make([]Article, 0, len(publishedResult.Data)+len(draftResult.Data))
-	for _, v := range publishedResult.Data {
-		allArticles = append(allArticles, articleToAPIArticle(v))
+	apiArticles := make([]Article, len(result.Data))
+	for i, v := range result.Data {
+		apiArticles[i] = articleToAPIArticle(v)
 	}
-	for _, v := range draftResult.Data {
-		allArticles = append(allArticles, articleToAPIArticle(v))
-	}
-
-	sort.Slice(allArticles, func(i, j int) bool {
-		return allArticles[i].UpdatedAt.After(*allArticles[j].UpdatedAt)
-	})
-
-	if int32(len(allArticles)) > limit {
-		allArticles = allArticles[:limit]
-	}
-
-	hasNextPage := publishedResult.HasNextPage || draftResult.HasNextPage
 
 	return GetArticlesV1Admin200JSONResponse{
-		Data:        allArticles,
-		HasNextPage: hasNextPage,
+		Data:        apiArticles,
+		Cursor:      result.Cursor,
+		HasNextPage: result.HasNextPage,
 	}, nil
 }
 

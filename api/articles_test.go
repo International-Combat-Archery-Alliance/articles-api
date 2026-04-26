@@ -132,19 +132,14 @@ func TestGetArticlesV1Slug(t *testing.T) {
 func TestGetArticlesV1Admin(t *testing.T) {
 	t.Run("successfully get published and draft articles", func(t *testing.T) {
 		published := domainArticleFixture("pub", articles.StatusPublished)
-		published.UpdatedAt = now.Add(time.Hour)
+		published.UpdatedAt = now.Add(2 * time.Hour)
 		draft := domainArticleFixture("drf", articles.StatusDraft)
+		draft.UpdatedAt = now.Add(time.Hour)
 
 		mock := &mockDB{
 			GetArticlesFunc: func(ctx context.Context, limit int32, cursor *string, status string) (articles.GetArticlesResponse, error) {
-				if status == string(articles.StatusPublished) {
-					return articles.GetArticlesResponse{
-						Data:        []articles.Article{published},
-						HasNextPage: false,
-					}, nil
-				}
 				return articles.GetArticlesResponse{
-					Data:        []articles.Article{draft},
+					Data:        []articles.Article{published, draft},
 					HasNextPage: false,
 				}, nil
 			},

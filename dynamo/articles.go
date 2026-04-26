@@ -46,23 +46,23 @@ func articleSK(slug string) string {
 	return fmt.Sprintf("%s#%s", articleEntityName, slug)
 }
 
+var statusPriority = map[articles.Status]int{
+	articles.StatusDraft:     1,
+	articles.StatusPublished: 0,
+}
+
 func newArticleDynamo(article articles.Article) articleDynamo {
 	contentBytes, err := json.Marshal(article.Content)
 	if err != nil {
 		panic(fmt.Sprintf("failed to marshal content: %s", err))
 	}
 
-	var gsi1SK string
-	if article.Status == articles.StatusPublished && article.PublishedAt != nil {
-		gsi1SK = fmt.Sprintf("PUBLISHED_AT#%s#%s", article.PublishedAt.Format(time.RFC3339Nano), article.Slug)
-	} else {
-		gsi1SK = fmt.Sprintf("CREATED_AT#%s#%s", article.CreatedAt.Format(time.RFC3339Nano), article.Slug)
-	}
+	gsi1SK := fmt.Sprintf("STATUS#%d#%s#UPDATED_AT#%s#%s", statusPriority[article.Status], article.Status, article.UpdatedAt.Format(time.RFC3339Nano), article.Slug)
 
 	return articleDynamo{
 		PK:     articlePK(article.Slug),
 		SK:     articleSK(article.Slug),
-		GSI1PK: fmt.Sprintf("STATUS#%s", article.Status),
+		GSI1PK: "ARTICLE",
 		GSI1SK: gsi1SK,
 		Slug:   article.Slug,
 
@@ -244,14 +244,12 @@ func (d *DB) GetArticles(ctx context.Context, limit int32, cursor *string, artic
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	statusPK := fmt.Sprintf("STATUS#%s", articleStatus)
-	beginsWithPrefix := "PUBLISHED_AT#"
-	if articleStatus == string(articles.StatusDraft) {
-		beginsWithPrefix = "CREATED_AT#"
+	var keyCond expression.KeyConditionBuilder
+	keyCond = expression.Key("GSI1PK").Equal(expression.Value("ARTICLE"))
+	if articleStatus != "" {
+		beginsWithPrefix := fmt.Sprintf("STATUS#%d#%s#UPDATED_AT#", statusPriority[articles.Status(articleStatus)], articleStatus)
+		keyCond = keyCond.And(expression.Key("GSI1SK").BeginsWith(beginsWithPrefix))
 	}
-
-	keyCond := expression.Key("GSI1PK").Equal(expression.Value(statusPK)).
-		And(expression.Key("GSI1SK").BeginsWith(beginsWithPrefix))
 
 	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
 	if err != nil {

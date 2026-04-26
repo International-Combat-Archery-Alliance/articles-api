@@ -125,8 +125,8 @@ func TestCreateArticle(t *testing.T) {
 		assert.Equal(t, "ARTICLE#new-article", stored.PK)
 		assert.Equal(t, "new-article", stored.Slug)
 		assert.Equal(t, 1, stored.Version)
-		assert.Equal(t, "STATUS#draft", stored.GSI1PK)
-		assert.Contains(t, stored.GSI1SK, "CREATED_AT#")
+		assert.Equal(t, "ARTICLE", stored.GSI1PK)
+		assert.Contains(t, stored.GSI1SK, "STATUS#1#draft#UPDATED_AT#")
 	})
 
 	t.Run("article already exists", func(t *testing.T) {
@@ -224,15 +224,15 @@ func TestDeleteArticle(t *testing.T) {
 func TestGetArticles(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("list published articles sorted by publishedAt desc", func(t *testing.T) {
+	t.Run("list published articles sorted by updatedAt desc", func(t *testing.T) {
 		resetTable(ctx)
 
 		a1 := articleFixture("article-1", articles.StatusPublished)
-		a1.PublishedAt = ptrTime(now.Add(1 * time.Hour))
+		a1.UpdatedAt = now.Add(1 * time.Hour)
 		require.NoError(t, testDB.CreateArticle(ctx, a1))
 
 		a2 := articleFixture("article-2", articles.StatusPublished)
-		a2.PublishedAt = ptrTime(now.Add(2 * time.Hour))
+		a2.UpdatedAt = now.Add(2 * time.Hour)
 		require.NoError(t, testDB.CreateArticle(ctx, a2))
 
 		result, err := testDB.GetArticles(ctx, 10, nil, string(articles.StatusPublished))
@@ -248,11 +248,11 @@ func TestGetArticles(t *testing.T) {
 		resetTable(ctx)
 
 		a1 := articleFixture("draft-1", articles.StatusDraft)
-		a1.CreatedAt = now.Add(1 * time.Hour)
+		a1.UpdatedAt = now.Add(1 * time.Hour)
 		require.NoError(t, testDB.CreateArticle(ctx, a1))
 
 		a2 := articleFixture("draft-2", articles.StatusDraft)
-		a2.CreatedAt = now.Add(2 * time.Hour)
+		a2.UpdatedAt = now.Add(2 * time.Hour)
 		require.NoError(t, testDB.CreateArticle(ctx, a2))
 
 		result, err := testDB.GetArticles(ctx, 10, nil, string(articles.StatusDraft))
@@ -267,7 +267,7 @@ func TestGetArticles(t *testing.T) {
 
 		for i := range 5 {
 			a := articleFixture("page-test-"+string(rune('a'+i)), articles.StatusPublished)
-			a.PublishedAt = ptrTime(now.Add(time.Duration(i+1) * time.Hour))
+			a.UpdatedAt = now.Add(time.Duration(i+1) * time.Hour)
 			require.NoError(t, testDB.CreateArticle(ctx, a))
 		}
 
@@ -278,6 +278,53 @@ func TestGetArticles(t *testing.T) {
 		assert.NotNil(t, result.Cursor)
 
 		result2, err := testDB.GetArticles(ctx, 3, result.Cursor, string(articles.StatusPublished))
+		require.NoError(t, err)
+		require.Len(t, result2.Data, 2)
+		assert.False(t, result2.HasNextPage)
+		assert.Nil(t, result2.Cursor)
+	})
+
+	t.Run("admin listing returns all articles with drafts first then published, sorted by updatedAt desc within each", func(t *testing.T) {
+		resetTable(ctx)
+
+		d1 := articleFixture("draft-1", articles.StatusDraft)
+		d1.UpdatedAt = now.Add(1 * time.Hour)
+		require.NoError(t, testDB.CreateArticle(ctx, d1))
+
+		p1 := articleFixture("pub-1", articles.StatusPublished)
+		p1.UpdatedAt = now.Add(3 * time.Hour)
+		require.NoError(t, testDB.CreateArticle(ctx, p1))
+
+		p2 := articleFixture("pub-2", articles.StatusPublished)
+		p2.UpdatedAt = now.Add(2 * time.Hour)
+		require.NoError(t, testDB.CreateArticle(ctx, p2))
+
+		result, err := testDB.GetArticles(ctx, 10, nil, "")
+		require.NoError(t, err)
+		require.Len(t, result.Data, 3)
+		assert.Equal(t, "draft-1", result.Data[0].Slug)
+		assert.Equal(t, "pub-1", result.Data[1].Slug)
+		assert.Equal(t, "pub-2", result.Data[2].Slug)
+		assert.False(t, result.HasNextPage)
+		assert.Nil(t, result.Cursor)
+	})
+
+	t.Run("admin listing with cursor", func(t *testing.T) {
+		resetTable(ctx)
+
+		for i := range 5 {
+			a := articleFixture("admin-test-"+string(rune('a'+i)), articles.StatusDraft)
+			a.UpdatedAt = now.Add(time.Duration(i+1) * time.Hour)
+			require.NoError(t, testDB.CreateArticle(ctx, a))
+		}
+
+		result, err := testDB.GetArticles(ctx, 3, nil, "")
+		require.NoError(t, err)
+		require.Len(t, result.Data, 3)
+		assert.True(t, result.HasNextPage)
+		assert.NotNil(t, result.Cursor)
+
+		result2, err := testDB.GetArticles(ctx, 3, result.Cursor, "")
 		require.NoError(t, err)
 		require.Len(t, result2.Data, 2)
 		assert.False(t, result2.HasNextPage)

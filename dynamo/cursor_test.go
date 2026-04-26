@@ -49,15 +49,15 @@ func TestGetKeyFromItem(t *testing.T) {
 	fullKey := map[string]types.AttributeValue{
 		"PK":     &types.AttributeValueMemberS{Value: "ARTICLE#slug-1"},
 		"SK":     &types.AttributeValueMemberS{Value: "ARTICLE#slug-1"},
-		"GSI1PK": &types.AttributeValueMemberS{Value: "STATUS#published"},
-		"GSI1SK": &types.AttributeValueMemberS{Value: "PUBLISHED_AT#2024-01-01T00:00:00Z#slug-1"},
+		"GSI1PK": &types.AttributeValueMemberS{Value: "ARTICLE"},
+		"GSI1SK": &types.AttributeValueMemberS{Value: "STATUS#0#published#UPDATED_AT#2024-01-01T00:00:00Z#slug-1"},
 	}
 
 	fullItem := map[string]types.AttributeValue{
 		"PK":     &types.AttributeValueMemberS{Value: "ARTICLE#slug-1"},
 		"SK":     &types.AttributeValueMemberS{Value: "ARTICLE#slug-1"},
-		"GSI1PK": &types.AttributeValueMemberS{Value: "STATUS#published"},
-		"GSI1SK": &types.AttributeValueMemberS{Value: "PUBLISHED_AT#2024-01-01T00:00:00Z#slug-1"},
+		"GSI1PK": &types.AttributeValueMemberS{Value: "ARTICLE"},
+		"GSI1SK": &types.AttributeValueMemberS{Value: "STATUS#0#published#UPDATED_AT#2024-01-01T00:00:00Z#slug-1"},
 		"Title":  &types.AttributeValueMemberS{Value: "Test Title"},
 		"Status": &types.AttributeValueMemberS{Value: "published"},
 	}

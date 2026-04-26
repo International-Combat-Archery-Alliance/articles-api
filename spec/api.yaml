@@ -15,7 +15,7 @@ paths:
   /articles/v1:
     get:
       summary: List published articles
-      description: Retrieves a paginated list of published articles sorted by publishedAt descending.
+      description: Retrieves a paginated list of published articles sorted by updatedAt descending.
       security: []
       parameters:
         - name: cursor
