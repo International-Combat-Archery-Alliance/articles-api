@@ -1,0 +1,26 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Code coverage
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Go workspace
+go.work
+go.work.sum
+
+# Environment
+.env
+
+# AWS SAM build artifacts
+.aws-sam*
+bootstrap
+
+# Local env config
+env.json

@@ -1,0 +1,550 @@
+openapi: 3.0.0
+info:
+  title: ICAA Articles API
+  version: 1.0.0
+  description: An API for managing articles for the ICAA website.
+servers:
+  - url: https://api.icaa.world/
+    description: Production server
+  - url: http://localhost:3000/
+    description: Local dev server
+security:
+  - icaaCookieAuth: []
+  - icaaBearerAuth: []
+paths:
+  /articles/v1:
+    get:
+      summary: List published articles
+      description: Retrieves a paginated list of published articles sorted by publishedAt descending.
+      security: []
+      parameters:
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          required: false
+          schema:
+            type: string
+            example: "Y29uZ3JhdHMsIHlvdSBmb3VuZCB0aGUgZWFzdGVyIGVnZw=="
+        - name: limit
+          in: query
+          description: Max number of articles to fetch
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 50
+            example: 10
+      responses:
+        '200':
+          description: A list of published articles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - hasNextPage
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Article'
+                  cursor:
+                    type: string
+                    example: "Y29uZ3JhdHMsIHlvdSBmb3VuZCB0aGUgZWFzdGVyIGVnZw=="
+                  hasNextPage:
+                    type: boolean
+                    example: true
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new article
+      description: Creates a new article. Defaults to draft status. Admin only.
+      security:
+        - icaaCookieAuth: [admin]
+        - icaaBearerAuth: [admin]
+      requestBody:
+        description: Article creation details
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArticleRequest'
+      responses:
+        '201':
+          description: Article created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - article
+                properties:
+                  article:
+                    $ref: '#/components/schemas/Article'
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Article with this slug already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /articles/v1/admin:
+    get:
+      summary: List all articles (admin)
+      description: Retrieves a paginated list of all articles (draft and published) sorted by updatedAt descending. Admin only.
+      security:
+        - icaaCookieAuth: [admin]
+        - icaaBearerAuth: [admin]
+      parameters:
+        - name: cursor
+          in: query
+          description: Cursor for pagination
+          required: false
+          schema:
+            type: string
+            example: "Y29uZ3JhdHMsIHlvdSBmb3VuZCB0aGUgZWFzdGVyIGVnZw=="
+        - name: limit
+          in: query
+          description: Max number of articles to fetch
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 50
+            example: 10
+      responses:
+        '200':
+          description: A list of all articles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - hasNextPage
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Article'
+                  cursor:
+                    type: string
+                    example: "Y29uZ3JhdHMsIHlvdSBmb3VuZCB0aGUgZWFzdGVyIGVnZw=="
+                  hasNextPage:
+                    type: boolean
+                    example: true
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /articles/v1/{slug}:
+    get:
+      summary: Get a published article by slug
+      description: Retrieves a single published article by its slug.
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            example: icaa-launch
+      responses:
+        '200':
+          description: The article.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - article
+                properties:
+                  article:
+                    $ref: '#/components/schemas/Article'
+        '404':
+          description: Article not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      summary: Update an article
+      description: Updates an existing article. Admin only.
+      security:
+        - icaaCookieAuth: [admin]
+        - icaaBearerAuth: [admin]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            example: icaa-launch
+      requestBody:
+        description: Article update details
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateArticleRequest'
+      responses:
+        '200':
+          description: Article updated successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - article
+                properties:
+                  article:
+                    $ref: '#/components/schemas/Article'
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Article not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete an article
+      description: Deletes an article by slug. Admin only.
+      security:
+        - icaaCookieAuth: [admin]
+        - icaaBearerAuth: [admin]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            example: icaa-launch
+      responses:
+        '204':
+          description: Article deleted successfully.
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Article not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /articles/v1/{slug}/publish:
+    post:
+      summary: Publish an article
+      description: Sets an article's status to published and sets the publishedAt timestamp. Admin only.
+      security:
+        - icaaCookieAuth: [admin]
+        - icaaBearerAuth: [admin]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            example: icaa-launch
+      responses:
+        '200':
+          description: Article published successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - article
+                properties:
+                  article:
+                    $ref: '#/components/schemas/Article'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Article not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /articles/v1/{slug}/unpublish:
+    post:
+      summary: Unpublish an article
+      description: Sets an article's status back to draft and clears the publishedAt timestamp. Admin only.
+      security:
+        - icaaCookieAuth: [admin]
+        - icaaBearerAuth: [admin]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            example: icaa-launch
+      responses:
+        '200':
+          description: Article unpublished successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - article
+                properties:
+                  article:
+                    $ref: '#/components/schemas/Article'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Article not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Unknown server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    icaaCookieAuth:
+      type: apiKey
+      in: cookie
+      name: ICAA_ACCESS_TOKEN
+      description: ICAA access token cookie
+    icaaBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ICAA access token in Authorization header
+  schemas:
+    ArticleStatus:
+      type: string
+      enum:
+        - draft
+        - published
+      example: published
+
+    Article:
+      type: object
+      required:
+        - slug
+        - title
+        - excerpt
+        - content
+        - status
+        - author
+        - createdAt
+        - updatedAt
+        - version
+      properties:
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*$'
+          description: URL-friendly slug, immutable after creation
+          example: icaa-launch
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: ICAA Launch Announcement
+        excerpt:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: The ICAA is proud to announce its official launch...
+        content:
+          type: object
+          description: Editor.js JSON block data
+        status:
+          $ref: '#/components/schemas/ArticleStatus'
+        author:
+          type: string
+          readOnly: true
+          description: Email of the admin who created the article
+          example: admin@icaa.world
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2025-08-29T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+          example: "2025-08-30T15:30:00Z"
+        publishedAt:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the article was published, null if draft
+          example: "2025-08-29T12:00:00Z"
+        version:
+          type: integer
+          readOnly: true
+          example: 1
+
+    CreateArticleRequest:
+      type: object
+      required:
+        - slug
+        - title
+        - excerpt
+        - content
+      properties:
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*$'
+          example: icaa-launch
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: ICAA Launch Announcement
+        excerpt:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: The ICAA is proud to announce its official launch...
+        content:
+          type: object
+
+    UpdateArticleRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Updated ICAA Launch Announcement
+        excerpt:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        content:
+          type: object
+
+    ErrorCode:
+      type: string
+      enum:
+        - InternalError
+        - LimitOutOfBounds
+        - InvalidCursor
+        - NotFound
+        - EmptyBody
+        - InvalidBody
+        - AlreadyExists
+        - InputValidationError
+        - AuthError
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+          example: InternalError
+        message:
+          type: string
+          example: An unexpected error occurred.
