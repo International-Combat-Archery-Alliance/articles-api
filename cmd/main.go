@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,20 +10,10 @@ import (
 	"time"
 
 	"github.com/International-Combat-Archery-Alliance/articles-api/api"
-	"github.com/International-Combat-Archery-Alliance/articles-api/dynamo"
 	"github.com/International-Combat-Archery-Alliance/auth/token"
 	"github.com/International-Combat-Archery-Alliance/telemetry"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"go.opentelemetry.io/otel"
-)
-
-const (
-	newRelicLicenseEnvVar  = "NEW_RELIC_LICENSE_KEY"
-	newRelicLicenseSSMPath = "/newrelic-license-key"
+	"golang.org/x/sync/errgroup"
 )
 
 var tracer = otel.Tracer("github.com/International-Combat-Archery-Alliance/articles-api/cmd")
@@ -41,7 +29,14 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	articlesAPI, err := setupAPI(logger)
+	articlesAPI, traceShutdown, err := setupAPI(logger)
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := traceShutdown(shutdownCtx); err != nil {
+			logger.Error("failed to shutdown telemetry", "error", err)
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -69,7 +64,7 @@ func run(logger *slog.Logger) error {
 	}
 }
 
-func setupAPI(logger *slog.Logger) (*api.API, error) {
+func setupAPI(logger *slog.Logger) (*api.API, func(context.Context) error, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -77,7 +72,7 @@ func setupAPI(logger *slog.Logger) (*api.API, error) {
 
 	licenseKey, err := getNewRelicLicenseKey(ctx, env)
 	if err != nil {
-		return nil, fmt.Errorf("new relic license key: %w", err)
+		return nil, func(context.Context) error { return nil }, fmt.Errorf("new relic license key: %w", err)
 	}
 
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -92,22 +87,46 @@ func setupAPI(logger *slog.Logger) (*api.API, error) {
 		Lambda:      telemetry.LambdaInfoFromEnv(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("telemetry init: %w", err)
+		return nil, traceShutdown, fmt.Errorf("telemetry init: %w", err)
 	}
 
 	ctx, startupSpan := tracer.Start(ctx, "startup")
 	defer startupSpan.End()
 
-	db, err := makeDB(ctx)
-	if err != nil {
-		startupSpan.RecordError(err)
-		return nil, fmt.Errorf("db init: %w", err)
-	}
+	var (
+		db           api.DB
+		signingKeys  map[string]token.SigningKey
+		currentKeyID string
+	)
 
-	signingKeys, currentKeyID, err := getJWTSigningKeys(ctx, env)
-	if err != nil {
+	g, gCtx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		ctx, span := tracer.Start(gCtx, "init-db")
+		defer span.End()
+
+		var err error
+		db, err = makeDB(ctx)
+		if err != nil {
+			span.RecordError(err)
+		}
+		return err
+	})
+
+	g.Go(func() error {
+		ctx, span := tracer.Start(gCtx, "init-config")
+		defer span.End()
+
+		var err error
+		signingKeys, currentKeyID, err = getJWTSigningKeys(ctx, env)
+		if err != nil {
+			span.RecordError(err)
+		}
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
 		startupSpan.RecordError(err)
-		return nil, fmt.Errorf("jwt signing keys: %w", err)
+		return nil, traceShutdown, err
 	}
 
 	tokenService := token.NewTokenService(
@@ -117,9 +136,7 @@ func setupAPI(logger *slog.Logger) (*api.API, error) {
 
 	articlesAPI := api.NewAPI(db, logger, env, tokenService, flushTraces)
 
-	_ = traceShutdown
-
-	return articlesAPI, nil
+	return articlesAPI, traceShutdown, nil
 }
 
 type ServerSettings struct {
@@ -132,153 +149,4 @@ func getServerSettingsFromEnv() ServerSettings {
 		Host: getEnvOrDefault("HOST", "0.0.0.0"),
 		Port: getEnvOrDefault("PORT", "8080"),
 	}
-}
-
-func getEnvOrDefault(key string, defaultVal string) string {
-	if v, ok := os.LookupEnv(key); ok {
-		return v
-	}
-	return defaultVal
-}
-
-func makeDB(ctx context.Context) (*dynamo.DB, error) {
-	var dynamoClient *dynamodb.Client
-	var err error
-	if isLocal() {
-		dynamoClient, err = createLocalDynamoClient(ctx)
-	} else {
-		dynamoClient, err = createProdDynamoClient(ctx)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamo client: %w", err)
-	}
-
-	db := dynamo.NewDB(dynamoClient, os.Getenv("DYNAMO_TABLE_NAME"))
-	return db, nil
-}
-
-func isLocal() bool {
-	return getEnvOrDefault("AWS_SAM_LOCAL", "false") == "true"
-}
-
-func getAPIEnvironment() api.Environment {
-	if isLocal() {
-		return api.LOCAL
-	}
-	return api.PROD
-}
-
-func loadAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, optFns...)
-	if err != nil {
-		return aws.Config{}, err
-	}
-	telemetry.InstrumentAWSConfig(&cfg)
-	return cfg, nil
-}
-
-func createLocalDynamoClient(ctx context.Context) (*dynamodb.Client, error) {
-	cfg, err := loadAWSConfig(ctx,
-		config.WithRegion("localhost"),
-		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
-			Value: aws.Credentials{
-				AccessKeyID: "local", SecretAccessKey: "local", SessionToken: "",
-				Source: "Mock credentials used above for local instance",
-			},
-		}),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
-		o.BaseEndpoint = aws.String("http://dynamodb:8000")
-	}), nil
-}
-
-func createProdDynamoClient(ctx context.Context) (*dynamodb.Client, error) {
-	cfg, err := loadAWSConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return dynamodb.NewFromConfig(cfg), nil
-}
-
-func getNewRelicLicenseKey(ctx context.Context, env api.Environment) (string, error) {
-	if env == api.LOCAL {
-		return os.Getenv(newRelicLicenseEnvVar), nil
-	}
-
-	cfg, err := loadAWSConfig(ctx)
-	if err != nil {
-		return "", fmt.Errorf("unable to load AWS SDK config: %w", err)
-	}
-
-	client := ssm.NewFromConfig(cfg)
-
-	result, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(newRelicLicenseSSMPath),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to get New Relic license key from Parameter Store: %w", err)
-	}
-
-	return *result.Parameter.Value, nil
-}
-
-type jwtSigningKeysData struct {
-	CurrentKey string            `json:"currentKey"`
-	Keys       map[string]string `json:"keys"`
-}
-
-func getJWTSigningKeys(ctx context.Context, env api.Environment) (map[string]token.SigningKey, string, error) {
-	if env == api.LOCAL {
-		key := os.Getenv("JWT_SIGNING_KEY")
-		if key == "" {
-			key = "local-development-signing-key-minimum-32-characters-long"
-		}
-		return map[string]token.SigningKey{
-			"local": {ID: "local", Key: []byte(key)},
-		}, "local", nil
-	}
-
-	cfg, err := loadAWSConfig(ctx)
-	if err != nil {
-		return nil, "", fmt.Errorf("unable to load AWS SDK config: %w", err)
-	}
-
-	client := ssm.NewFromConfig(cfg)
-
-	result, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String("/jwtSigningKeys"),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to get JWT signing keys from Parameter Store: %w", err)
-	}
-
-	var data jwtSigningKeysData
-	if err := json.Unmarshal([]byte(*result.Parameter.Value), &data); err != nil {
-		return nil, "", fmt.Errorf("failed to parse JWT signing keys JSON: %w", err)
-	}
-
-	signingKeys := make(map[string]token.SigningKey)
-	for keyID, keyValue := range data.Keys {
-		decodedKey, err := base64.StdEncoding.DecodeString(keyValue)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to decode base64 key %q: %w", keyID, err)
-		}
-		signingKeys[keyID] = token.SigningKey{
-			ID:  keyID,
-			Key: decodedKey,
-		}
-	}
-
-	if _, ok := signingKeys[data.CurrentKey]; !ok {
-		return nil, "", fmt.Errorf("current key ID %q not found in keys", data.CurrentKey)
-	}
-
-	return signingKeys, data.CurrentKey, nil
 }
