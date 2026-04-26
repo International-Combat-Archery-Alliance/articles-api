@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "articles-api"
+resolve_s3 = true
+s3_prefix = "articles-api"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = ["ICAAArticles=197461532156.dkr.ecr.us-east-1.amazonaws.com/articlesapi02ce1d60/icaaarticles98fa2521repo"]
+
+[default.global.parameters]
+region = "us-east-1"
