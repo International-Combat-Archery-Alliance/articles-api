@@ -6,7 +6,7 @@ tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
 require (
 	github.com/International-Combat-Archery-Alliance/auth v0.3.1
-	github.com/International-Combat-Archery-Alliance/middleware v0.4.0
+	github.com/International-Combat-Archery-Alliance/middleware v0.5.0
 	github.com/International-Combat-Archery-Alliance/telemetry v0.2.0
 	github.com/aws/aws-sdk-go-v2 v1.41.6
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
@@ -22,6 +22,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/dynamodb v0.42.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
+	golang.org/x/sync v0.20.0
 )
 
 require (
@@ -113,7 +114,6 @@ require (
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
