@@ -13,7 +13,6 @@ import (
 	"github.com/International-Combat-Archery-Alliance/auth/token"
 	"github.com/International-Combat-Archery-Alliance/telemetry"
 	"go.opentelemetry.io/otel"
-	"golang.org/x/sync/errgroup"
 )
 
 var tracer = otel.Tracer("github.com/International-Combat-Archery-Alliance/articles-api/cmd")
@@ -93,15 +92,9 @@ func setupAPI(logger *slog.Logger) (*api.API, func(context.Context) error, error
 	ctx, startupSpan := tracer.Start(ctx, "startup")
 	defer startupSpan.End()
 
-	var (
-		db           api.DB
-		signingKeys  map[string]token.SigningKey
-		currentKeyID string
-	)
-
-	g, gCtx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		ctx, span := tracer.Start(gCtx, "init-db")
+	var db api.DB
+	if err := func() error {
+		ctx, span := tracer.Start(ctx, "init-db")
 		defer span.End()
 
 		var err error
@@ -110,31 +103,17 @@ func setupAPI(logger *slog.Logger) (*api.API, func(context.Context) error, error
 			span.RecordError(err)
 		}
 		return err
-	})
-
-	g.Go(func() error {
-		ctx, span := tracer.Start(gCtx, "init-config")
-		defer span.End()
-
-		var err error
-		signingKeys, currentKeyID, err = getJWTSigningKeys(ctx, env)
-		if err != nil {
-			span.RecordError(err)
-		}
-		return err
-	})
-
-	if err := g.Wait(); err != nil {
+	}(); err != nil {
 		startupSpan.RecordError(err)
 		return nil, traceShutdown, err
 	}
 
-	tokenService := token.NewTokenService(
-		signingKeys[currentKeyID],
-		token.WithSigningKeys(signingKeys, currentKeyID),
-	)
+	validator := token.NewKeyCache(jwksURLForEnv(env))
+	if err := validator.StartupFetch(ctx); err != nil {
+		logger.Warn("jwks startup fetch failed (non-fatal); user token verification will fail closed until keys are fetched", "error", err)
+	}
 
-	articlesAPI := api.NewAPI(db, logger, env, tokenService, flushTraces)
+	articlesAPI := api.NewAPI(db, logger, env, validator, flushTraces)
 
 	return articlesAPI, traceShutdown, nil
 }

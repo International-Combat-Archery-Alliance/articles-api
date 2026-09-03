@@ -47,7 +47,7 @@ func TestGetArticlesV1(t *testing.T) {
 				}, nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := GetArticlesV1RequestObject{Params: GetArticlesV1Params{}}
 		resp, err := api.GetArticlesV1(ctxWithLogger(context.Background(), noopLogger), req)
@@ -69,7 +69,7 @@ func TestGetArticlesV1(t *testing.T) {
 				return articles.GetArticlesResponse{}, articles.NewInvalidCursorError("bad cursor", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := GetArticlesV1RequestObject{Params: GetArticlesV1Params{}}
 		resp, err := api.GetArticlesV1(ctxWithLogger(context.Background(), noopLogger), req)
@@ -93,7 +93,7 @@ func TestGetArticlesV1Slug(t *testing.T) {
 				return article, nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := GetArticlesV1SlugRequestObject{Slug: "my-slug"}
 		resp, err := api.GetArticlesV1Slug(ctxWithLogger(context.Background(), noopLogger), req)
@@ -114,7 +114,7 @@ func TestGetArticlesV1Slug(t *testing.T) {
 				return articles.Article{}, articles.NewArticleDoesNotExistError("not found", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := GetArticlesV1SlugRequestObject{Slug: "nonexistent"}
 		resp, err := api.GetArticlesV1Slug(ctxWithLogger(context.Background(), noopLogger), req)
@@ -144,7 +144,7 @@ func TestGetArticlesV1Admin(t *testing.T) {
 				}, nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := GetArticlesV1AdminRequestObject{Params: GetArticlesV1AdminParams{}}
 		resp, err := api.GetArticlesV1Admin(ctxWithLogger(context.Background(), noopLogger), req)
@@ -165,7 +165,7 @@ func TestGetArticlesV1Admin(t *testing.T) {
 				return articles.GetArticlesResponse{}, articles.NewTimeoutError("timeout")
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := GetArticlesV1AdminRequestObject{Params: GetArticlesV1AdminParams{}}
 		resp, err := api.GetArticlesV1Admin(ctxWithLogger(context.Background(), noopLogger), req)
@@ -194,7 +194,7 @@ func TestGetArticlesV1Admin(t *testing.T) {
 				}, nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		limit := 3
 		req := GetArticlesV1AdminRequestObject{Params: GetArticlesV1AdminParams{Limit: &limit}}
@@ -221,7 +221,7 @@ func TestPostArticlesV1(t *testing.T) {
 				return nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		ctx := middleware.CtxWithJWT(context.Background(), &mockAuthToken{
 			email:   "admin@example.com",
@@ -254,7 +254,7 @@ func TestPostArticlesV1(t *testing.T) {
 				return articles.NewArticleAlreadyExistsError("slug exists", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		ctx := middleware.CtxWithJWT(context.Background(), &mockAuthToken{
 			email:   "admin@example.com",
@@ -282,7 +282,7 @@ func TestPostArticlesV1(t *testing.T) {
 
 	t.Run("returns 401 when no JWT in context", func(t *testing.T) {
 		mock := &mockDB{}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		body := CreateArticleRequest{
 			Slug:    "any-slug",
@@ -315,7 +315,7 @@ func TestPatchArticlesV1Slug(t *testing.T) {
 				return nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		newTitle := "Updated Title"
 		newExcerpt := "Updated Excerpt"
@@ -345,7 +345,7 @@ func TestPatchArticlesV1Slug(t *testing.T) {
 				return articles.Article{}, articles.NewArticleDoesNotExistError("not found", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := PatchArticlesV1SlugRequestObject{Slug: "nonexistent"}
 		resp, err := api.PatchArticlesV1Slug(ctxWithLogger(context.Background(), noopLogger), req)
@@ -371,7 +371,7 @@ func TestPatchArticlesV1Slug(t *testing.T) {
 				return nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		newTitle := "Only Title Changed"
 		req := PatchArticlesV1SlugRequestObject{
@@ -398,7 +398,7 @@ func TestDeleteArticlesV1Slug(t *testing.T) {
 				return nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := DeleteArticlesV1SlugRequestObject{Slug: "delete-me"}
 		resp, err := api.DeleteArticlesV1Slug(ctxWithLogger(context.Background(), noopLogger), req)
@@ -417,7 +417,7 @@ func TestDeleteArticlesV1Slug(t *testing.T) {
 				return articles.NewArticleDoesNotExistError("not found", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := DeleteArticlesV1SlugRequestObject{Slug: "nonexistent"}
 		resp, err := api.DeleteArticlesV1Slug(ctxWithLogger(context.Background(), noopLogger), req)
@@ -445,7 +445,7 @@ func TestPostArticlesV1SlugPublish(t *testing.T) {
 				return nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := PostArticlesV1SlugPublishRequestObject{Slug: "publish-me"}
 		resp, err := api.PostArticlesV1SlugPublish(ctxWithLogger(context.Background(), noopLogger), req)
@@ -466,7 +466,7 @@ func TestPostArticlesV1SlugPublish(t *testing.T) {
 				return articles.Article{}, articles.NewArticleDoesNotExistError("not found", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := PostArticlesV1SlugPublishRequestObject{Slug: "nonexistent"}
 		resp, err := api.PostArticlesV1SlugPublish(ctxWithLogger(context.Background(), noopLogger), req)
@@ -494,7 +494,7 @@ func TestPostArticlesV1SlugUnpublish(t *testing.T) {
 				return nil
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := PostArticlesV1SlugUnpublishRequestObject{Slug: "unpublish-me"}
 		resp, err := api.PostArticlesV1SlugUnpublish(ctxWithLogger(context.Background(), noopLogger), req)
@@ -515,7 +515,7 @@ func TestPostArticlesV1SlugUnpublish(t *testing.T) {
 				return articles.Article{}, articles.NewArticleDoesNotExistError("not found", nil)
 			},
 		}
-		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenService(), func(ctx context.Context) error { return nil })
+		api := NewAPI(mock, noopLogger, LOCAL, newTestTokenValidator(), func(ctx context.Context) error { return nil })
 
 		req := PostArticlesV1SlugUnpublishRequestObject{Slug: "nonexistent"}
 		resp, err := api.PostArticlesV1SlugUnpublish(ctxWithLogger(context.Background(), noopLogger), req)

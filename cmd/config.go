@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
 
 	"github.com/International-Combat-Archery-Alliance/articles-api/api"
-	"github.com/International-Combat-Archery-Alliance/auth/token"
 	"github.com/International-Combat-Archery-Alliance/telemetry"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -64,36 +61,6 @@ func getSSMParameter(ctx context.Context, name string) (string, error) {
 	return aws.ToString(result.Parameter.Value), nil
 }
 
-type jwtSigningKeysData struct {
-	CurrentKey string            `json:"currentKey"`
-	Keys       map[string]string `json:"keys"`
-}
-
-func parseJWTSigningKeysJSON(raw string) (map[string]token.SigningKey, string, error) {
-	var data jwtSigningKeysData
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return nil, "", fmt.Errorf("failed to parse JWT signing keys JSON: %w", err)
-	}
-
-	signingKeys := make(map[string]token.SigningKey)
-	for keyID, keyValue := range data.Keys {
-		decodedKey, err := base64.StdEncoding.DecodeString(keyValue)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to decode base64 key %q: %w", keyID, err)
-		}
-		signingKeys[keyID] = token.SigningKey{
-			ID:  keyID,
-			Key: decodedKey,
-		}
-	}
-
-	if _, ok := signingKeys[data.CurrentKey]; !ok {
-		return nil, "", fmt.Errorf("current key ID %q not found in keys", data.CurrentKey)
-	}
-
-	return signingKeys, data.CurrentKey, nil
-}
-
 func getNewRelicLicenseKey(ctx context.Context, env api.Environment) (string, error) {
 	if env == api.LOCAL {
 		return os.Getenv(newRelicLicenseEnvVar), nil
@@ -101,23 +68,16 @@ func getNewRelicLicenseKey(ctx context.Context, env api.Environment) (string, er
 	return getSSMParameter(ctx, newRelicLicenseSSMPath)
 }
 
-func getJWTSigningKeys(ctx context.Context, env api.Environment) (map[string]token.SigningKey, string, error) {
+// jwksURLForEnv returns the login JWKS endpoint used to verify user tokens.
+// LOGIN_JWKS_URL overrides both environments.
+func jwksURLForEnv(env api.Environment) string {
+	if u := os.Getenv("LOGIN_JWKS_URL"); u != "" {
+		return u
+	}
 	if env == api.LOCAL {
-		key := os.Getenv("JWT_SIGNING_KEY")
-		if key == "" {
-			key = "local-development-signing-key-minimum-32-characters-long"
-		}
-		return map[string]token.SigningKey{
-			"local": {ID: "local", Key: []byte(key)},
-		}, "local", nil
+		return "http://localhost:3001/login/.well-known/jwks.json"
 	}
-
-	raw, err := getSSMParameter(ctx, "/jwtSigningKeys")
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to get JWT signing keys from Parameter Store: %w", err)
-	}
-
-	return parseJWTSigningKeysJSON(raw)
+	return "https://api.icaa.world/login/.well-known/jwks.json"
 }
 
 func getAPIEnvironment() api.Environment {
